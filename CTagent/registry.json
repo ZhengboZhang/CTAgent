@@ -1,0 +1,12 @@
+{
+    "servers": [
+        {
+            "name": "calculator",
+            "script": "tools/calculate.py"
+        },
+        {
+            "name": "fetch",
+            "script": "tools/mcp-fetch.py"
+        }
+    ]
+}

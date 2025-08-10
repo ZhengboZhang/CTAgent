@@ -1,0 +1,3 @@
+pip install 安装包
+conda环境就行
+用clientcopy.py这个mcpclient，这个是为豆包设计的，张正博回头把mcp-fetch这个文件换了，你写的更好，陈骁例子用的md格式文件在output里。
