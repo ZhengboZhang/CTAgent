@@ -7,6 +7,14 @@
         {
             "name": "fetch",
             "script": "tools/mcp-fetch.py"
+        },
+        {
+            "name": "write_to_markdown",
+            "script": "tools/write_md.py"
+        },
+        {
+            "name": "write_to_word",
+            "script": "tools/write_doc.py"
         }
     ]
 }
