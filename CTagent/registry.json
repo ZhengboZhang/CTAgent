@@ -15,6 +15,10 @@
         {
             "name": "write_to_word",
             "script": "tools/write_doc.py"
+        },
+        {
+            "name": "write_to_pdf",
+            "script": "tools/write_pdf.py"
         }
     ]
 }
