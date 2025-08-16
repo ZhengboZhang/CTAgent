@@ -1,0 +1,12 @@
+{
+    "servers": [
+        {
+            "name": "fetch",
+            "script": "tools/mcp-fetch.py"
+        },
+        {
+            "name": "pdf2",
+            "script": "tools/pdftomd.py"
+        }
+    ]
+}
