@@ -203,7 +203,7 @@ def fetch_meta_data(
     return parser.get_metadata()
 
 @mcp.tool()
-def fetch_meta_data(
+def fetch_css(
     url: str,
 ):
     response = requests.get(url)
