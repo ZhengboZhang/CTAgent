@@ -7,6 +7,22 @@
         {
             "name": "pdf2",
             "script": "tools/pdftomd.py"
+        },
+        {
+            "name": "plot",
+            "script": "tools/plot.py"
+        },
+        {
+            "name": "write_doc",
+            "script": "tools/write_doc.py"
+        },
+        {
+            "name": "write_md",
+            "script": "tools/write_md.py"
+        },
+        {
+            "name": "write_pdf",
+            "script": "tools/write_pdf.py"
         }
     ]
 }
