@@ -158,6 +158,26 @@ def write_to_file(expression: str, file_path: str) -> str:
     except Exception as e:
         print(f"[AGENT-CALL] ❌ 工具 write_to_file 调用失败: {e}", file=sys.stderr)
         return f"写入文件 {file_path} 失败：{e}"
+    
+@mcp.tool()
+def read_pdf_writing_prompt() -> str:
+    """
+    获取：当用户要求读入pdf文档时，推荐给模型遵循的工具调用流程提示词。
+    """
+    return (
+        "当你需要将内容读入（.pdf）文档时，请严格按以下流程进行工具调用：\n"
+        "1) 首先调用 pdf_to_markdown：\n"
+        "   - 参数：pdf_path(输入PDF文件路径)，可选fname_base(输出文件名前缀,留空时使用 PDF 文件名。\n"
+        "   - 作用：把文档转化为md格式\n"
+        "2) 调用extract_text_and_images文档中的字符和图片路径：\n"
+        "   - 参数：md_path(输入md文档的路径)。\n"
+        "   - 作用：返回md文档中的字符和图片路径。\n"
+        "   - 返回：包含文章和图片路径的json格式信息\n"
+        "3) 调用load_image工具按之前提取出的图片路径加载图片的base64编码\n"
+        "4) 写作规范（默认已在工具中实现）：\n"
+        "   - 参数：path(图片路径)中文宋体，英文 Times New Roman。\n"
+        "   - 作用：加载图片让agent分析"
+    )
 
 if __name__ == "__main__":
     mcp.run(transport='stdio')
