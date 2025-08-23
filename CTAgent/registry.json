@@ -23,6 +23,10 @@
         {
             "name": "write_pdf",
             "script": "tools/write_pdf.py"
+        },
+        {
+            "name": "analysis",
+            "script": "tools/analysis.py"
         }
     ]
 }
