@@ -27,7 +27,7 @@ class MCPClient:
         self.conversation_history = []
         self.image_queue = []
         self.conversation_history.append({"role": "system", 
-            "content": "你是一个熟练的文档分析助手。请直接给出最终答案，不要展示思考过程或中间步骤。我给你配备了很多mcptool。当给你提供文档地址并让你分析时你会先使用pdf_to_markdown工具将其转化为md格式，然后使用extract_text_and_images工具解析转化而得的md文档中的文字和图片地址，接下来你会使用load_image加载图片链接"}
+            "content": "你是一个熟练的文档分析助手。请直接给出最终答案，不要展示思考过程或中间步骤。我给你配备了很多mcptool。当给你提供文档地址并让你分析时你会先使用pdf_to_markdown工具将其转化为md格式，然后使用extract_text_and_images工具解析转化而得的md文档中的文字和图片地址，接下来你会使用load_image加载图片链接，记住，当你给文档时你会查找是否有图片链接，如果有无论问题如何都要使用load_image加载图片"}
                                         )
 
     async def connect_to_server(self, server_id: str, server_script_path: str):
@@ -80,22 +80,6 @@ class MCPClient:
         支持多次工具调用，直到所有工具调用完成。
         """
         messages = self.conversation_history.copy()
-        
-        # 新增：检查是否有待处理的图片数据
-        if self.image_queue:
-            for img_data in self.image_queue:
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": img_data
-                            }
-                        }
-                    ]
-                })
-            self.image_queue = []  # 清空队列
         
         # 添加用户当前查询
         if query:
@@ -177,6 +161,12 @@ class MCPClient:
                     if tool_name == "load_image":
                         self.image_queue.append(result.content[0].text)
                         #continue  # 跳过添加到消息历史
+                    else:
+                        messages.append({
+                            "role": "tool",
+                            "content": result.content[0].text,
+                            "tool_call_id": tool_call.id,
+                        })
 
                     if self.image_queue:
                         for img_data in self.image_queue:
@@ -193,12 +183,6 @@ class MCPClient:
                             })
                         self.image_queue = []  # 清空队列
                     
-                    # 将其他工具调用的结果添加到 messages 中
-                    messages.append({
-                        "role": "tool",
-                        "content": result.content[0].text,
-                        "tool_call_id": tool_call.id,
-                    })
             
             if not choice.finish_reason == "tool_calls":
                 # 新增：过滤消息历史，跳过 role 为 tool 的消息
