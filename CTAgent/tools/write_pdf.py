@@ -119,11 +119,21 @@ def convert_docx_to_pdf(
 
     # 可选：删除源文件
     deleted = False
+    deletion_message = ""  # 用于记录删除操作的结果
     if delete_source:
         try:
-            os.remove(src)
-            deleted = True
-        except Exception:
+            # 确保文件路径位于 ./temp 目录下
+            temp_dir = os.path.abspath("./temp")
+            src_abs = os.path.abspath(src)
+            if src_abs.startswith(temp_dir):  # 检查文件是否在 ./temp 目录中
+                os.remove(src_abs)
+                deleted = True
+                deletion_message = f"文件已成功删除：{src_abs}"
+            else:
+                deletion_message = f"安全警告：试图删除非 ./temp 路径下的文件：{src_abs}"
+                deleted = False
+        except Exception as e:
+            deletion_message = f"删除文件失败：{e}"
             deleted = False  # 保持转换成功，但报告删除失败
 
     return {
@@ -131,20 +141,31 @@ def convert_docx_to_pdf(
         "input_docx": src,
         "output_pdf": out_pdf,
         "deleted_source": deleted,
+        "message": deletion_message
     }
 
 
 @mcp.tool()
 def delete_file(file_path: str) -> Dict[str, Any]:
     """
-    删除文件（支持普通文件或符号链接；不删除目录）。
+    删除文件（支持普通文件或符号链接；不删除目录，仅限 ./temp 下的文件）。
     - file_path: 待删除的文件路径
     返回:
       {status, deleted, path, error?}
     """
     path = _abs(file_path)
+    temp_dir = os.path.abspath("./temp")  # 确定 ./temp 目录的绝对路径
 
     try:
+        # 检查文件是否位于 ./temp 目录下
+        if not os.path.abspath(path).startswith(temp_dir):
+            return {
+                "status": "error",
+                "deleted": False,
+                "path": path,
+                "error": f"File deletion is restricted to './temp' directory. Attempted path: {path}"
+            }
+
         # 覆盖损坏的符号链接场景
         if not os.path.lexists(path):
             return {"status": "not_found", "deleted": False, "path": path}
@@ -181,25 +202,43 @@ def delete_file(file_path: str) -> Dict[str, Any]:
 @mcp.tool()
 def get_pdf_workflow_prompt() -> str:
     """
-    返回“先写 Word，再转 PDF”的推荐工作流提示词（Linux）。
+    返回生成PDF文件的推荐工作流提示词。
     """
     return (
         "当你需要输出 PDF 时，请严格遵循以下工作流（先写 Word，再转 PDF）：\n"
-        "1) 使用 word-writer 工具链先生成 .docx（保持同一个 file_path）：\n"
-        "   - init_document(file_path, title?, author?) 初始化文档（如需封面标题可传 title）。\n"
-        "   - write_title(file_path, text) 可选：写入封面标题（居中）。\n"
-        "   - write_heading_level_1/2/3(file_path, text) 写入各级标题（H1 居中，H2/H3 左对齐）。\n"
-        "   - write_paragraph(file_path, text, align?, first_line_indent?) 写入正文。\n"
-        "   - write_table(file_path, headers, rows, column_widths_cm?, align?) 写入表格。\n"
-        "   - write_image(file_path, image_path, width_cm?, caption?, align?) 插入图片。\n"
-        "2) 写作完成后，使用本服务将 .docx 转换为 PDF（Linux，LibreOffice）：\n"
-        "   - 调用 convert_docx_to_pdf(file_path, output_pdf_path?, delete_source?)。\n"
-        "   - 若希望在转换后自动删除 .docx，将 delete_source 设为 True。\n"
-        "3) 若未在转换时删除源文件，可调用 delete_original_word(file_path) 单独删除。\n"
-        "4) 在回答中明确说明：\n"
-        "   - 已写入哪些内容（如：Title、H1、3 段正文、1 个表格、1 张图片）。\n"
-        "   - PDF 的最终输出路径（以及是否已删除 .docx）。\n"
-        "注意：请确保已安装 LibreOffice 且 soffice 可用；output_pdf_path 可留空以在同目录同名输出。\n"
+        "1) **生成 Word 中间文件**：\n"
+        "   - 首先调用 `get_file_path` 生成 Word 文件路径，确保其存储在临时目录（`temp`）。\n"
+        "   - 调用示例：\n"
+        "       ```python\n"
+        "       word_path = get_file_path(type='temp', file_name='example.docx')\n"
+        "       ```\n"
+        "   - 使用 word-writer 工具链完成文档写作，保持对 `word_path` 的引用：\n"
+        "       - 调用 `init_document(word_path, title?, author?)` 初始化文档（如需封面标题可传 title）。\n"
+        "       - 调用 `write_title(word_path, text)` 写入封面标题（居中，可选）。\n"
+        "       - 调用 `write_heading_level_1/2/3(word_path, text)` 写入各级标题（H1 居中，H2/H3 左对齐）。\n"
+        "       - 调用 `write_paragraph(word_path, text, align?, first_line_indent?)` 写入正文。\n"
+        "       - 调用 `write_table(word_path, headers, rows, column_widths_cm?, align?)` 写入表格。\n"
+        "       - 调用 `write_image(word_path, image_path, width_cm?, caption?, align?)` 插入图片。\n"
+        "2) **生成 PDF 文件**：\n"
+        "   - 调用 `get_file_path` 为 PDF 文件生成输出路径（`output` 或 `user`）：\n"
+        "       ```python\n"
+        "       pdf_path = get_file_path(type='output', file_name='example.pdf')\n"
+        "       ```\n"
+        "       - 若用户指定路径，则使用 `type='user'` 和 `path` 参数生成路径。\n"
+        "   - 调用 `convert_docx_to_pdf(word_path, output_pdf_path=pdf_path, delete_source?)` 将 Word 文件转换为 PDF。\n"
+        "       - 若希望在转换后删除 Word 文件，请将 `delete_source` 设置为 `True`。\n"
+        "3) **回答中需明确以下内容**：\n"
+        "   - 已写入的文档内容（如：Title、H1、3 段正文、1 个表格、1 张图片）。\n"
+        "   - PDF 的最终输出路径。\n"
+        "   - 是否保留了中间的 Word 文件。\n"
+        "4) **路径逻辑说明**：\n"
+        "   - Word 文件路径：必须存储在临时目录（`temp`，例如 `./temp/document.docx`）。\n"
+        "   - PDF 文件路径：\n"
+        "       - 默认存储在输出目录（`output`，例如 `./output/document.pdf`）。\n"
+        "       - 若用户指定路径，则存储在用户自定义目录（`user`，例如 `/home/user/documents/document.pdf`）。\n"
+        "   - 路径生成需调用 `get_file_path`，避免直接传入不安全路径。\n"
+        "5) **注意事项**：\n"
+        "   - 请确保已安装 LibreOffice 且 `soffice` 命令可用。\n"
     )
 
 

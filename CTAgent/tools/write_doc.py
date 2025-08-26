@@ -363,6 +363,40 @@ def write_image(
     _save_document(doc, file_path)
     return {"status": "ok", "file_path": file_path, "image": image_path}
 
+@mcp.tool()
+def get_file_path(type: str, file_name: str, path: str = None) -> str:
+    """
+    根据输入参数生成文件路径。
+    
+    参数:
+        type (str): 文件类型，可选值为 "temp", "output", "user"。
+        file_name (str): 文件名，必须是合法的文件名。
+        path (str, optional): 当 type 为 "user" 时，用户指定的路径。
+
+    返回:
+        str: 生成的文件路径。
+
+    异常:
+        ValueError: 如果参数不合法或存在安全隐患。
+    """
+    # 检查 type 是否为预期值
+    if type not in {"temp", "output", "user"}:
+        raise ValueError(f"Invalid type '{type}'. Must be 'temp', 'output', or 'user'.")
+
+    # 检查 file_name 是否为合法文件名（防止路径注入）
+    if not file_name or not file_name.isprintable() or "/" in file_name or "\\" in file_name:
+        raise ValueError(f"Invalid file_name '{file_name}'. Must be a valid, printable file name without path separators.")
+
+    # 根据 type 生成路径
+    if type == "temp":
+        return os.path.join("./temp", file_name)
+    elif type == "output":
+        return os.path.join("./output", file_name)
+    elif type == "user":
+        # 检查 path 是否为合法路径
+        if not path or not os.path.isabs(path):
+            raise ValueError(f"Invalid path '{path}'. Must be a valid absolute path for 'user' type.")
+        return os.path.join(path, file_name)
 
 @mcp.tool()
 def get_word_writing_prompt() -> str:
@@ -371,26 +405,38 @@ def get_word_writing_prompt() -> str:
     """
     return (
         "当你需要将内容写入Word（.docx）文档时，请严格按以下流程进行工具调用：\n"
-        "1) 首先调用 init_document：\n"
-        "   - 参数：file_path（输出文件路径），可选 title（封面标题），author（作者）。\n"
+        "1) 首先调用 get_file_path 函数生成 file_path：\n"
+        "   - 参数：\n"
+        "       - type（文件类型）：可选 'temp'（临时文件）或 'output'（最终输出文件）。\n"
+        "       - file_name（文件名）：用户指定文件名。\n"
+        "       - path（可选，用户自定义路径）：仅当 type 为 'user' 时使用。\n"
+        "   - 返回值：根据参数生成的文件路径。\n"
+        "   - 示例：\n"
+        "       - 若 type='temp' 且 file_name='example.docx'，返回 './temp/example.docx'。\n"
+        "       - 若 type='output' 且 file_name='final.docx'，返回 './output/final.docx'。\n"
+        "       - 若 type='user' 且 path='/home/user/docs'，返回 '/home/user/docs/example.docx'。\n"
+        "2) 调用 init_document 创建或打开文档：\n"
+        "   - 参数：file_path（通过 get_file_path 生成），可选 title（封面标题），author（作者）。\n"
         "   - 作用：创建/打开文档，并设置页边距、基础样式。\n"
         "   - 若需要在后续补充/修改标题，可调用 write_title。\n"
-        "2) 按文档结构依次写入内容：\n"
+        "3) 按文档结构依次写入内容：\n"
         "   - 文档标题：使用 write_title 写入封面标题（居中）。\n"
         "   - 章节标题：使用 write_heading_level_1/2/3 写入不同层级标题（H1 居中，H2/H3 左对齐）。\n"
         "   - 正文：使用 write_paragraph 写入段落（默认首行缩进、1.5倍行距）。\n"
         "   - 表格：使用 write_table，传入 headers 与 rows（二维数组），必要时设置 column_widths_cm。\n"
         "   - 图片：使用 write_image，提供 image_path，必要时设置 width_cm 与 caption。\n"
-        "3) 每次调用工具都会自动保存文档；请保持对同一个 file_path 的引用，避免分散到多个文件。\n"
-        "4) 写作规范（默认已在工具中实现）：\n"
+        "4) 每次调用工具都会自动保存文档；请保持对同一个 file_path 的引用，避免分散到多个文件。\n"
+        "5) 写作规范（默认已在工具中实现）：\n"
         "   - 字体：中文宋体，英文 Times New Roman。\n"
         "   - 标题：Title=20pt加粗居中；H1=16pt加粗居中；H2=14pt加粗左对齐；H3=12pt加粗左对齐；合适的段前/段后。\n"
         "   - 正文：12pt，1.5倍行距，默认首行缩进2字符。\n"
         "   - 表格：Table Grid 风格，表头加粗，内容居中；必要时设定列宽。\n"
         "   - 图片：支持插入本地图片，必要时设置宽度与说明。\n"
         "   - 公式：支持插入复杂 LaTeX 公式或简单 EQ 字段公式。\n"
-        "5) 在输出中清楚说明你已完成了哪些写入（例如：已写入Title、H1、3段正文、1个表格、1张图片、2个公式），并提供最终文档路径。\n"
-        "6) 若用户追加修改或继续写作，延续使用相同 file_path 继续写入即可。\n"
+        "6) 输出中需清楚说明已完成的写入内容，包括：\n"
+        "   - 写入的内容类型（例如：已写入Title、H1、正文段落、表格、图片、公式等）。\n"
+        "   - 提供最终文档路径。\n"
+        "7) 若用户追加修改或继续写作，延续使用相同 file_path 继续写入即可。\n"
     )
 
 
