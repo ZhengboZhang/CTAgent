@@ -1,0 +1,70 @@
+{
+    "pdf_pipeline": {
+      "desc": "当用户给定一个 PDF 文件并要求分析其内容、提取文字或图片时使用",
+      "tools": ["pdf_to_markdown", "extract_text_and_images", "load_image"]
+    },
+    "web_pipeline": {
+      "desc": "当用户给出网址并要求抓取网页正文、元数据或按 CSS 提取内容时使用",
+      "tools": ["fetch_structured_text", "fetch_meta_data", "fetch_css"]
+    },
+    "gif_pipeline": {
+      "desc": "当用户上传 GIF 并要求逐帧查看或分析动图内容时使用",
+      "tools": ["gif_to_jpeg_frames", "load_image"]
+    },
+    "word_pipeline": {
+        "desc": "用户给定 Word 并要求全文分析、提取文字与图片",
+        "tools": ["docx_to_markdown", "extract_text_and_images", "load_image"]
+    },
+    "csv_pipeline": {
+        "desc": "用户给定 CSV 并要求查看或分析表格数据",
+        "tools": ["csv_to_markdown", "extract_text_and_images"]
+    },
+    "data_visualization_pipeline": {
+        "desc": "用户需要将一组数据可视化为常见图表（折线图、柱状图、散点图、直方图、饼图）",
+        "tools": ["plot_line", "plot_bar", "plot_scatter", "plot_histogram", "plot_pie"]
+    },
+    "time_series_pipeline": {
+        "desc": "用户需要将时间序列数据绘制成折线图或面积图",
+        "tools": ["plot_line", "plot_area"]
+    },
+    "comparison_pipeline": {
+        "desc": "用户需要对比不同类别数值大小，生成柱状图或饼图",
+        "tools": ["plot_bar", "plot_pie"]
+    },
+    "distribution_pipeline": {
+        "desc": "用户需要展示数据分布情况，绘制直方图或散点图",
+        "tools": ["plot_histogram", "plot_scatter"]
+    },
+    "custom_plot_pipeline": {
+        "desc": "用户需要根据特定需求定制特定的图表组合",
+        "tools": ["plot_line", "plot_bar", "plot_scatter", "plot_histogram", "plot_pie", "plot_area"]
+    },
+    "word_report_pipeline": {
+        "desc": "用户需要生成一份完整的 Word 报告，包含标题、多级标题、正文、表格和图片",
+        "tools": ["init_document", "write_title", "write_heading_level_1", "write_heading_level_2", "write_heading_level_3", "write_paragraph", "write_table", "write_image"]
+    },
+    "word_summary_pipeline": {
+        "desc": "用户需要生成一个简短的 Word 摘要，只包含标题和正文",
+        "tools": ["init_document", "write_title", "write_paragraph"]
+    },
+    "word_table_pipeline": {
+        "desc": "用户需要生成一个包含表格数据的 Word 文档",
+        "tools": ["init_document", "write_table"]
+    },
+    "word_image_pipeline": {
+        "desc": "用户需要生成一个包含图片和说明的 Word 文档",
+        "tools": ["init_document", "write_image"]
+    },
+    "word_section_pipeline": {
+        "desc": "用户需要生成一个包含多级标题和正文的 Word 文档",
+        "tools": ["init_document", "write_heading_level_1", "write_heading_level_2", "write_heading_level_3", "write_paragraph"]
+    },
+    "markdown_writer_pipeline": {
+        "desc": "用户需要将内容写入 Markdown 文件，可指定目录、文件名、是否覆盖等选项",
+        "tools": ["write_to_markdown"]
+    },
+    "docx_to_pdf_pipeline": {
+        "desc": "用户需要将 Word 文档（.docx/.doc）转换为 PDF，并可选择是否删除源文件",
+        "tools": ["convert_docx_to_pdf", "delete_file"]
+    } 
+}
