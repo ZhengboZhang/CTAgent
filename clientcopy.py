@@ -1,11 +1,17 @@
 import asyncio
 import os
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 from openai import OpenAI
 from dotenv import load_dotenv
 from contextlib import AsyncExitStack
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-import json
+import json, pathlib
+from temp_manager import TempManager
+from vllm import LLM, SamplingParams
+import uuid
+from transformers import AutoTokenizer
+from pathlib import Path
 
 # 加载 .env 文件
 load_dotenv()
@@ -14,14 +20,32 @@ class MCPClient:
     def __init__(self):
         """初始化 MCP 客户端"""
         self.exit_stack = AsyncExitStack()
-        self.api_key = os.getenv("ARK_API_KEY")  # 读取 OpenAI API Key
+        self.api_key = os.getenv("ARK_API_KEY", True)  # 读取 OpenAI API Key
         self.base_url = os.getenv("ARK_BASE_URL")  # 读取 BASE URL
         self.model = os.getenv("ARK_MODEL")  # 读取 model
+        self.pipelines = json.loads(pathlib.Path("pipelines.json").read_text(encoding="utf-8"))
        
         if not self.api_key:
             raise ValueError("未找到 API KEY. 请在 .env 文件中配置 API_KEY")
-
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+
+        self.use_local = os.getenv("USE_LOCAL_AGENT", "false").lower() == "true"
+
+        # 0.3 初始化 vLLM 引擎（仅在开关开启时）
+        if self.use_local:
+            self.router_engine = LLM(
+                model=os.getenv("ROUTER_MODEL_PATH", "Qwen/Qwen2.5-7B-Instruct"),
+                dtype="float16",
+                max_model_len=2048,
+                gpu_memory_utilization=0.5,
+                trust_remote_code=True,
+            )
+            self.router_tokenizer = AutoTokenizer.from_pretrained(
+                os.getenv("ROUTER_MODEL_PATH", "Qwen/Qwen2.5-7B-Instruct"),
+                trust_remote_code=True,
+            )
+        # 0.4 其余成员
+        self.exit_stack = AsyncExitStack()
         self.sessions = {}  # 存储多个服务端会话
         self.tools_map = {}  # 工具映射：工具名称 -> 服务端 ID
         self.conversation_history = []
@@ -29,6 +53,9 @@ class MCPClient:
         self.conversation_history.append({"role": "system", 
             "content": "你是一个熟练的文档分析助手。请直接给出最终答案，不要展示思考过程或中间步骤。我给你配备了很多mcptool。当给你提供文档地址并让你分析时你会先使用pdf_to_markdown工具将其转化为md格式，然后使用extract_text_and_images工具解析转化而得的md文档中的文字和图片地址，接下来你会使用load_image加载图片链接，记住，当你给文档时你会查找是否有图片链接，如果有无论问题如何都要使用load_image加载图片"}
                                         )
+        self.temp_mgr = TempManager(root="temp", max_mb=300, ttl_sec=3600)
+        self.recent_questions: List[str] = []
+        self.temp_mgr.clear_all() 
 
     async def connect_to_server(self, server_id: str, server_script_path: str):
         """
@@ -73,130 +100,159 @@ class MCPClient:
         print("已连接的服务端工具列表:")
         for tool_name, server_id in self.tools_map.items():
             print(f"工具: {tool_name}, 来源服务端: {server_id}")
+    
 
-    async def process_query(self, query: str) -> str:
+    async def router_llm(self, messages: list,
+                        available_tools: list,
+                        threshold: float = 0.5) -> list[str]:
         """
-        调用大模型处理用户查询，并根据返回的 tools 列表调用对应工具。
-        支持多次工具调用，直到所有工具调用完成。
+        7 B 置信度打分路由：逐个工具链给出 0–1 分，≥阈值入选，并展开工具链
         """
-        messages = self.conversation_history.copy()
+        if not self.use_local:
+            return []
+
+        user_turn = messages[-1]["content"]
+        selected_tools = []
         
-        # 添加用户当前查询
-        if query:
-            messages.append({"role": "user", "content": query})
+        history_q = "\n".join(f"- {q}" for q in self.recent_questions)
 
-        # 构建统一的工具列表
-        available_tools = []
-        for tool_name, server_id in self.tools_map.items():
-            session = self.sessions[server_id]["session"]
-            response = await session.list_tools()
-            for tool in response.tools:
-                if tool.name == tool_name:
-                    available_tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "input_schema": tool.inputSchema
-                        }
-                    })
+        # 构建工具链描述
+        pipeline_descriptions = []
+        for pipeline_name, pipeline_info in self.pipelines.items():
+            pipeline_descriptions.append({
+                "name": pipeline_name,
+                "description": pipeline_info["desc"]
+            })
 
-        # 循环处理工具调用
-        while True:
-            # 请求 OpenAI 模型处理
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=available_tools,
-                extra_body={
-                    "thinking": {
-                    "type": "disabled", 
-                    }
-                }
+        # 对每个工具链打分
+        for pipeline in pipeline_descriptions:
+            name = pipeline["name"]
+            desc = pipeline["description"]
+
+            prompt = (
+                "<|im_start|>system\n"
+                "You are a relevance scorer. Given user questions (including previous rounds) and a tool pipeline, "
+                "output a single float between 0 and 1 indicating how helpful the pipeline is.\n"
+                "0 = no help, 1 = essential. Only output the number.\n"
+                "<|im_end|>\n"
+                "<|im_start|>user\n"
+                f"Recent questions:\n{history_q}\n\n"
+                f"Current question: {user_turn}\n"
+                f"Pipeline: {name}\n"
+                f"Description: {desc}\n"
+                "<|im_end|>\n"
+                "<|im_start|>assistant\n"
             )
 
-            # 获取模型返回的消息
-            choice = response.choices[0]
-            message = choice.message
-            
-            # 创建助手消息对象
-            assistant_msg = {
-                "role": "assistant",
-                "content": message.content
-            }
-            
-            # 如果有工具调用，添加 tool_calls 字段
-            if message.tool_calls:
-                assistant_msg["tool_calls"] = [
-                    {
-                        "id": call.id,
-                        "type": call.type,
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments,
-                        }
-                    } for call in message.tool_calls
-                ]
-            
-            # 添加到消息历史
-            messages.append(assistant_msg)
+            sampling = SamplingParams(max_tokens=5,   # 足够输出 "0.83"
+                                    temperature=0.0,
+                                    stop=["\n", " "])
+            outs = self.router_engine.generate([prompt], sampling, use_tqdm=False)
 
-            # 处理返回的内容
-            if choice.finish_reason == "tool_calls":
-                # 执行工具调用
-                for tool_call in message.tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
+            try:
+                score = float(outs[0].outputs[0].text.strip())
+            except ValueError:
+                score = 0.0
 
-                    # 根据工具名称找到对应的服务端
-                    server_id = self.tools_map.get(tool_name)
-                    if not server_id:
-                        raise ValueError(f"未找到工具 {tool_name} 对应的服务端")
+            if score >= threshold:
+                selected_tools.extend(self.pipelines[name]["tools"])
 
-                    session = self.sessions[server_id]["session"]
-                    result = await session.call_tool(tool_name, tool_args)
-                    print(f"\n\n[Calling tool {tool_name} on server {server_id} with args {tool_args}]\n\n")
+        # 去重：保留工具链顺序，去掉重复工具
+        seen = set()
+        final_selected_tools = []
+        for tool in selected_tools:
+            if tool not in seen:
+                seen.add(tool)
+                final_selected_tools.append(tool)
 
-                    # 特殊处理：如果是图片工具，将结果存入中转队列
-                    if tool_name == "load_image":
-                        self.image_queue.append(result.content[0].text)
-                        #continue  # 跳过添加到消息历史
-                    else:
-                        messages.append({
-                            "role": "tool",
-                            "content": result.content[0].text,
-                            "tool_call_id": tool_call.id,
+        return final_selected_tools
+
+    async def process_query(self, query: str) -> str:
+            messages = self.conversation_history.copy()
+            if query:
+                messages.append({"role": "user", "content": query})
+                self.recent_questions.append(query)
+                self.recent_questions = self.recent_questions[-5:] 
+
+            available_tools = []
+            for tool_name, server_id in self.tools_map.items():
+                session = self.sessions[server_id]["session"]
+                for tool in (await session.list_tools()).tools:
+                    if tool.name == tool_name:
+                        available_tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": tool.name,
+                                "description": tool.description,
+                                "input_schema": tool.inputSchema
+                            }
                         })
 
-                    if self.image_queue:
-                        for img_data in self.image_queue:
+            # 如果启用路由模型，则根据路由模型的打分选择工具
+            if self.use_local:
+                candidates = await self.router_llm(messages, available_tools)  # List[str]
+                if candidates:
+                    available_tools = [t for t in available_tools if t["function"]["name"] in candidates]
+
+            # 如果关闭路由模型，直接使用所有工具
+            while True:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=available_tools,  # 直接传递所有工具
+                    extra_body={"thinking": {"type": "disabled"}}
+                )
+                choice = response.choices[0]
+                message = choice.message
+
+                assistant_msg = {"role": "assistant", "content": message.content}
+                if message.tool_calls:
+                    assistant_msg["tool_calls"] = [
+                        {
+                            "id": call.id,
+                            "type": call.type,
+                            "function": {
+                                "name": call.function.name,
+                                "arguments": call.function.arguments,
+                            }
+                        } for call in message.tool_calls
+                    ]
+                messages.append(assistant_msg)
+
+                if choice.finish_reason == "tool_calls":
+                    for tool_call in message.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        server_id = self.tools_map.get(tool_name)
+                        if not server_id:
+                            raise ValueError(f"未找到工具 {tool_name} 对应的服务端")
+
+                        session = self.sessions[server_id]["session"]
+                        result = await session.call_tool(tool_name, tool_args)
+                        print(f"\n[Calling tool {tool_name} | {tool_args}]\n")
+
+                        if tool_name == "load_image":
+                            self.image_queue.append(result.content[0].text)
+                        else:
                             messages.append({
-                                "role": "user",
-                                "content": [
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": img_data
-                                        }
-                                    }
-                                ]
+                                "role": "tool",
+                                "content": result.content[0].text,
+                                "tool_call_id": tool_call.id,
                             })
-                        self.image_queue = []  # 清空队列
-                    
-            
-            if not choice.finish_reason == "tool_calls":
-                # 新增：过滤消息历史，跳过 role 为 tool 的消息
-                filtered_messages = []
-                for msg in messages:
-                    if msg["role"] != "tool":
-                        filtered_messages.append(msg)
-                
-                # 将本轮对话（用户查询 + 模型回复）存入历史
-                self.conversation_history.extend(filtered_messages)
-                        # 限制历史长度避免过度消耗token
-                filtered_messages = []
-                self._trim_history(max_length=20)
-                return message.content
+
+                        if self.image_queue:
+                            for img_data in self.image_queue:
+                                messages.append({
+                                    "role": "user",
+                                    "content": [{"type": "image_url", "image_url": {"url": img_data}}]
+                                })
+                            self.image_queue = []
+
+                else:
+                    filtered = [m for m in messages if m["role"] != "tool"]
+                    self.conversation_history.extend(filtered)
+                    self._trim_history(max_length=20)
+                    return message.content
             
 
     def _trim_history(self, max_length: int):
@@ -222,6 +278,7 @@ class MCPClient:
 
                 response = await self.process_query(query)
                 print(f"AI回复: {response}")
+                self.temp_mgr.cleanup()
 
             except Exception as e:
                 print(f"发生错误: {str(e)}")
@@ -232,6 +289,7 @@ class MCPClient:
         self.sessions.clear()
         self.tools_map.clear()
         self.conversation_history.clear()  # 新增：清理历史记录
+        self.temp_mgr.clear_all()
 
 async def main():
     # 启动并初始化 MCP 客户端
