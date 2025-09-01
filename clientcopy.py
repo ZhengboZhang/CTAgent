@@ -199,8 +199,9 @@ class MCPClient:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    tools=available_tools,  # 直接传递所有工具
-                    extra_body={"thinking": {"type": "disabled"}}
+                    tools=available_tools,
+                    temperature=0.3,  # 直接传递所有工具
+                    extra_body={"thinking": {"type": "enabled"}}
                 )
                 choice = response.choices[0]
                 message = choice.message
