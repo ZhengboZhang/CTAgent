@@ -2,6 +2,11 @@
 
 Official code of Tencent Open project, developed by CASIA & Tsinghua University.
 
+## Introduction
+
+CTAgent is a tool for automatically generating file analysis reports. It supports the analysis of files in formats such as `pdf`, `md`, and `csv`. Due to token-based pricing, this tool features a self-routing mechanism that can invoke either locally deployed models or APIs based on the requirements. It is a comprehensive tool **Multi-Agent**. Below is an example:
+
+![CTAgent Example](./figures/IMG_5551.JPG)
 
 ## Installation
 ```bash
