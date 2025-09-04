@@ -10,6 +10,8 @@ from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 
+from PIL import Image
+
 mcp = FastMCP("word-writer")
 
 # ===== Formatting defaults =====
@@ -245,7 +247,7 @@ def _add_image(
 
 # ===== MCP Tools =====
 @mcp.tool()
-def init_document(file_path: str, title: Optional[str] = None, author: Optional[str] = None) -> Dict[str, Any]:
+def init_document(file_path: str, author: Optional[str] = None) -> Dict[str, Any]:
     """
     初始化或打开一个 .docx 文档，并设置页面边距与基础样式。
     - file_path: 文档路径（若不存在则创建）
@@ -255,9 +257,6 @@ def init_document(file_path: str, title: Optional[str] = None, author: Optional[
     doc = _load_or_create_document(file_path, author=author)
     # Ensure formatting every time (in case of existing doc created elsewhere)
     _configure_page_and_styles(doc)
-
-    if title:
-        _add_title(doc, title)
 
     _save_document(doc, file_path)
     return {"status": "ok", "file_path": file_path}
@@ -350,18 +349,46 @@ def write_image(
     width_cm: Optional[float] = None,
     caption: Optional[str] = None,
     align: str = "center",
+    max_width_cm: float = 15.0,  # 默认最大宽度为 15 cm
 ) -> Dict[str, Any]:
     """
     写入图片。
+    - file_path: 文档路径
     - image_path: 本地图片路径
-    - width_cm: 可选，宽度（cm）。不填则按图片原始尺寸
+    - width_cm: 可选，宽度（cm）。不填则自动调整至适应宽度
     - caption: 可选，图片标题/说明
-    - align: left/center/right
+    - align: 图片对齐方式，left/center/right
+    - max_width_cm: 可选，图片允许的最大宽度（cm），默认 15 cm
     """
+    # 加载或创建文档
     doc = _load_or_create_document(file_path)
+
+    # 获取图片的像素尺寸
+    with Image.open(image_path) as img:
+        original_width, original_height = img.size
+
+    # 将像素转换为厘米（假设分辨率为 96 DPI）
+    dpi = 96  # 每英寸像素数
+    original_width_cm = original_width / dpi * 2.54
+
+    # 如果未指定宽度，或宽度超过最大限制，调整至适应宽度
+    if width_cm is None or original_width_cm > max_width_cm:
+        width_cm = min(original_width_cm, max_width_cm)
+
+    # 写入图片到文档
     _add_image(doc, image_path, width_cm=width_cm, caption=caption, align=align)
+
+    # 保存文档
     _save_document(doc, file_path)
-    return {"status": "ok", "file_path": file_path, "image": image_path}
+
+    # 返回结果信息
+    return {
+        "status": "ok",
+        "file_path": file_path,
+        "image": image_path,
+        "original_width_cm": original_width_cm,
+        "final_width_cm": width_cm,
+    }
 
 @mcp.tool()
 def get_file_path(type: str, file_name: str, path: str = None) -> str:
