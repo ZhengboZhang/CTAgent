@@ -1,0 +1,15 @@
+aiofiles
+docx2python
+gradio
+httpx
+mammoth
+markdown
+marker-pdf
+matplotlib
+openai
+pillow
+python-docx
+python-dotenv
+requests
+transformers
+vllm
