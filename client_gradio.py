@@ -410,7 +410,7 @@ def create_gradio_interface(client):
                         minimum=0, maximum=1, value=0.7, step=0.1, label="温度 (控制随机性)"
                     )
                     max_length = gr.Slider(
-                        minimum=100, maximum=1000, value=500, step=50, label="最大生成长度"
+                        minimum=100, maximum=10000, value=2000, step=50, label="最大生成长度"
                     )
 
                 with gr.Row():
