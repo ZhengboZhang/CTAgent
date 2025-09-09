@@ -64,7 +64,7 @@ ROUTER_MODEL_PATH=Qwen/Qwen2.5-7B-Instruct  本地路由模型类型，建议使
 
 ![](./figures/run.png)
 
-在浏览器中输入http://127.0.0.1:7861，打开如下网页
+在浏览器中输入，打开如下网页`http://127.0.0.1:7861`
 
 ![](./figures/face.png)
 
