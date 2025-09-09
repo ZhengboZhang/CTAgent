@@ -6,7 +6,7 @@
 
 CTAgent 是一个基于 Model Context Protocol (MCP) 构建的先进 LLM 智能体系统，专为高效、灵活地处理与分析多模态文档而设计。
 
-CTAgent is a tool for automatically generating file analysis reports. It supports the analysis of files in formats such as `pdf`, `md`, and `csv`. Due to token-based pricing, this tool features a self-routing mechanism that can invoke either locally deployed models or APIs based on the requirements. It is a comprehensive tool **Multi-Agent**. Below is an example:
+CTAgent 是一款可一键生成文件分析报告的工具，支持 pdf、md、csv 等多种格式。受 Token 计费限制，可以启用本地路由模型，先于api完成对于选择工具的判断，节约token，并且配备简单易用的前端页面。
 
 ![CTAgent Example](./figures/IMG_5551.JPG)
 
@@ -23,6 +23,8 @@ CTAgent is a tool for automatically generating file analysis reports. It support
 - **跨节点调用**：实现前端读取文件，传输指后台服务器处理，提高文件处理效率。
 
 - **路由模型**：用户可以选择是否使用本地路由模型，根据任务提取判断调用mcptool类型，节约token。
+
+- **自动化临时文件管理**：自动管理处理文档时产生的临时文件，防止占用用户存储空间。
 
 CTAgent 致力于帮助用户自动化文档处理流程，适用于数据分析、报告生成和内容摘要等多种应用场景。欢迎探索并贡献代码！
 
@@ -53,14 +55,14 @@ pip install -r requirements.txt
 
 项目相关配置都在.env文件中
 ```
-ARK_API_KEY=api_key  调用api时的api_key
-ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3  api调用网址
-ARK_MODEL="doubao-seed-1-6-thinking-250715"  调用的模型类型
-USE_LOCAL_AGENT=True  是否使用本地chen-x25@mails.tsinghua.edu.cn路由模型
-ROUTER_MODEL_PATH=Qwen/Qwen2.5-7B-Instruct  本地路由模型类型，建议使用7B以上
+ARK_API_KEY=api_key  #调用api时的api_key
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3  #api调用网址
+ARK_MODEL="doubao-seed-1-6-thinking-250715"  #调用的模型类型
+USE_LOCAL_AGENT=True  #是否使用本地路由模型
+ROUTER_MODEL_PATH=Qwen/Qwen2.5-7B-Instruct  #本地路由模型类型，建议使用7B以上
 ```
 
-在运行client.py后会生成一个连接，复制后输入浏览器中即可打开前端网页
+在运行client_gradio.py后会生成一个连接，复制后输入浏览器中即可打开前端网页
 
 ![](./figures/run.png)
 
@@ -72,9 +74,13 @@ ROUTER_MODEL_PATH=Qwen/Qwen2.5-7B-Instruct  本地路由模型类型，建议使
 
 **运行：**
 
+用户可以根据自身条件选用合适的client
+
 ```bash
 
-python ./client_gradio.py
+python ./client_gradio.py #产生用户有好的前端，适合家用电脑使用
+
+python ./client_loacal.py #启动路由模型，适合服务器使用
 
 ```
 
@@ -96,4 +102,4 @@ python ./client_gradio.py
 
 ### 4 联系方式
 
-If you have any questions, please feel free to email qiukaixiang2025@ia.ac.cn, zhangzhengbo2025@ia.ac.cn, chen-x25@mails.tsinghua.edu.cn
+如果您有任何问题，请联系这些邮箱 qiukaixiang2025@ia.ac.cn, zhangzhengbo2025@ia.ac.cn, chen-x25@mails.tsinghua.edu.cn

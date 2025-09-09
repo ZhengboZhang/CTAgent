@@ -179,7 +179,11 @@ class MCP_HTML_Parser(HTMLParser):
 def fetch_structured_text(
     url: str,
 ):
-
+    """
+    获取并解析目标网页的 主体结构化文本（Markdown 风格）。
+    - url: 待抓取网页的完整地址（http/https）
+    返回：按标题层级、段落、列表、链接等排版的纯文本字符串；若网页为 SPA 或登录墙，可能仅返回空壳。
+    """
     response = requests.get(url)
     response.encoding = 'utf-8'  
     html_content = response.text
@@ -193,6 +197,12 @@ def fetch_structured_text(
 def fetch_meta_data(
     url: str,
 ):
+
+    """
+    获取目标网页的 元数据。
+    - url: 待抓取网页的完整地址（http/https）
+    返回：字典，包含 title、description、keywords（列表）、author 等字段；若未声明对应 meta 标签则为空。
+    """
     response = requests.get(url)
     response.encoding = 'utf-8' 
     html_content = response.text
@@ -206,6 +216,12 @@ def fetch_meta_data(
 def fetch_css(
     url: str,
 ):
+
+    """
+    通过 简化版 CSS 选择器 提取网页全部 <p> 标签的文本。
+    - url: 待抓取网页的完整地址（http/https）
+    返回：每一段 <p> 的纯文本列表；当前仅支持单标签选择器，复杂选择器请自行扩展。
+    """
     response = requests.get(url)
     response.encoding = 'utf-8'  
     html_content = response.text
