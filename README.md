@@ -100,6 +100,10 @@ python ./client_loacal.py #启动路由模型，适合服务器使用
 
 [wine_analysis.pdf](./example/wine_analysis.pdf)
 
+**项目运行视频**
+
+[example](./figures/meeting_01.mp4)
+
 ### 4 联系方式
 
 如果您有任何问题，请联系这些邮箱 qiukaixiang2025@ia.ac.cn, zhangzhengbo2025@ia.ac.cn, chen-x25@mails.tsinghua.edu.cn
