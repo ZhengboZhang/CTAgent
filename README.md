@@ -104,6 +104,8 @@ python ./client_loacal.py #启动路由模型，适合服务器使用
 
 [example](./figures/meeting_01.mp4)
 
+https://github.com/user-attachments/assets/b17df972-6034-4375-b016-a3d77d43ff6c
+
 ### 4 联系方式
 
 如果您有任何问题，请联系这些邮箱 qiukaixiang2025@ia.ac.cn, zhangzhengbo2025@ia.ac.cn, chen-x25@mails.tsinghua.edu.cn
